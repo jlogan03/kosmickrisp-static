@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           while IFS= read -r file; do
-            detail=$(tail -100 "$file")
+            detail=$(tail -c 4000 "$file")
             detail=${detail//'%'/'%25'}
             detail=${detail//$'\n'/'%0A'}
             detail=${detail//$'\r'/'%0D'}

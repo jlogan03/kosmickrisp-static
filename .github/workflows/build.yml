@@ -15,6 +15,7 @@ defaults:
 
 jobs:
   macos:
+    if: "!contains(github.event.head_commit.message, '[diagnostics]')"
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -52,7 +53,7 @@ jobs:
         run: |
           for file in build.log probe.log; do
             if test -f "$file"; then
-              detail=$(tail -80 "$file")
+              detail=$(tail -c 4000 "$file")
               detail=${detail//'%'/'%25'}
               detail=${detail//$'\n'/'%0A'}
               detail=${detail//$'\r'/'%0D'}
