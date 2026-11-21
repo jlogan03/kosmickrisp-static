@@ -13,9 +13,12 @@ defaults:
   run:
     shell: bash
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   macos:
-    if: "!contains(github.event.head_commit.message, '[diagnostics]')"
     runs-on: macos-26
     timeout-minutes: 60
     env:
@@ -48,14 +51,19 @@ jobs:
       - name: Run Vulkan compute probe
         env:
           KOSMICKRISP_STATIC_DIR: ${{ github.workspace }}/dist/artifact
-        run: cargo +stable run --locked --example probe 2>&1 | tee probe.log
+        run: |
+          cargo +stable run --locked --example probe 2>&1 | tee probe.log
+          echo "::notice title=Vulkan probe::$(tail -2 probe.log | tr '\n' ' ')"
       - name: Check dynamic dependencies
         run: |
           test -x target/debug/examples/probe
           otool -L target/debug/examples/probe | tee dependencies.log
-          if grep -E '/opt/homebrew|/usr/local|libvulkan|libLLVM|libclang|libSPIRV' dependencies.log; then
-            exit 1
-          fi
+          while IFS= read -r library; do
+            case "$library" in
+              /usr/lib/*|/System/Library/*) ;;
+              *) echo "Unexpected dynamic dependency: $library"; exit 1 ;;
+            esac
+          done < <(tail -n +2 dependencies.log | awk '{print $1}')
       - name: Report failure details
         if: failure()
         run: |

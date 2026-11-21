@@ -196,6 +196,7 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     let tools_build = work.join("tools-build");
     let cc = output(Command::new("xcrun").args(["--find", "clang"]))?;
     let cxx = output(Command::new("xcrun").args(["--find", "clang++"]))?;
+    let sdk = output(Command::new("xcrun").args(["--sdk", "macosx", "--show-sdk-path"]))?;
     run(Command::new("cmake")
         .arg("-S")
         .arg(&tools)
@@ -212,6 +213,7 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
             "-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0",
         ])
         .arg(format!("-DCMAKE_INSTALL_PREFIX={}", prefix.display()))
+        .arg(format!("-DCMAKE_OSX_SYSROOT={sdk}"))
         .arg(format!("-DCMAKE_C_COMPILER={cc}"))
         .arg(format!("-DCMAKE_CXX_COMPILER={cxx}")))?;
     let jobs = std::thread::available_parallelism()?.get().to_string();
@@ -259,6 +261,7 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     }
     setup.env("PKG_CONFIG_PATH", env::join_paths(pkg_paths)?);
     setup.env("MACOSX_DEPLOYMENT_TARGET", "26.0");
+    setup.env("SDKROOT", &sdk);
     setup
         .env("CC", &cc)
         .env("CXX", &cxx)
@@ -269,7 +272,9 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
         .arg("compile")
         .arg("-C")
         .arg(&mesa_build)
-        .args(["-j", &jobs, "kosmickrisp_static"]))?;
+        .args(["-j", &jobs, "kosmickrisp_static"])
+        .env("SDKROOT", &sdk)
+        .env("MACOSX_DEPLOYMENT_TARGET", "26.0"))?;
     run(Command::new("xcrun")
         .args(["libtool", "-static", "-o"])
         .arg(destination.join("libKosmicKrisp.a"))
