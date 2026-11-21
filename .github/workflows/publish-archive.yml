@@ -1,0 +1,72 @@
+name: Publish existing archive
+
+on:
+  push:
+    branches: [jlogan/publish-archive]
+    paths: [.github/workflows/publish-archive.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-v0.1.0-alpha.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: "44858177313"
+      SOURCE_REVISION: 2435236d1e1dafa63a400b3bec68f1e8d5de79d6
+      RELEASE_TAG: v0.1.0-alpha.1
+      ARCHIVE: kosmickrisp-26.3.0-aarch64-apple-darwin-macos26.tar.gz
+    steps:
+      - name: Download the tested archive
+        shell: bash
+        run: |
+          gh api "repos/$GH_REPO/actions/runs/$SOURCE_RUN" > run.json
+          jq -e --arg revision "$SOURCE_REVISION" '
+            .head_sha == $revision and .conclusion == "success" and
+            .head_branch == "main" and .path == ".github/workflows/build.yml"
+          ' run.json
+          gh run download "$SOURCE_RUN" \
+            --name kosmickrisp-aarch64-apple-darwin-macos26 --dir artifact
+          cd artifact/dist
+          sha256sum --check "$ARCHIVE.sha256"
+          tar -xOf "$ARCHIVE" manifest.json | jq -e '
+            .target == "aarch64-apple-darwin" and .deployment_target == "26.0" and
+            .revision == "0a6fa60abb737d26ac8a316a4aad7c9ddf64f9e4"
+          '
+      - name: Publish prerelease
+        shell: bash
+        run: |
+          cat > release-notes.md <<'NOTES'
+          Static KosmicKrisp from Mesa 26.3.0 for ARM64 macOS 26 and later.
+          GPU execution requires Metal 4.
+
+          This archive comes from commit `2435236d1e1dafa63a400b3bec68f1e8d5de79d6`.
+          The [build](https://github.com/jlogan03/kosmickrisp-static/actions/runs/44858177313)
+          passed compilation, linking, and Vulkan instance checks. GPU execution
+          still needs testing on a Metal 4 Mac.
+
+          The archive contains `libKosmicKrisp.a`, its manifest, and license files.
+          The SHA-256 checksum is attached. Consumers need no Mesa source build,
+          Vulkan loader, or system driver installation.
+
+          Extract the archive and set `KOSMICKRISP_STATIC_DIR` to its directory.
+          Alternatively, set `KOSMICKRISP_ARTIFACT_URL` to the archive's release URL
+          and `KOSMICKRISP_ARTIFACT_SHA256` to the digest below.
+          Omit the `build-kosmickrisp` feature because it forces a source build.
+          NOTES
+          printf '\n```text\n' >> release-notes.md
+          cat "artifact/dist/$ARCHIVE.sha256" >> release-notes.md
+          printf '```\n' >> release-notes.md
+          gh release create "$RELEASE_TAG" \
+            "artifact/dist/$ARCHIVE" "artifact/dist/$ARCHIVE.sha256" \
+            --target "$SOURCE_REVISION" --title "KosmicKrisp static v0.1.0-alpha.1" \
+            --notes-file release-notes.md --prerelease --draft
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false
