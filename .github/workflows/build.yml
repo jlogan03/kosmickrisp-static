@@ -83,6 +83,8 @@ jobs:
         run: |
           target/debug/examples/probe --instance-only 2>&1 | tee instance.log
           echo "::notice title=Vulkan instance::$(tail -1 instance.log)"
+      - name: Check default release download
+        run: cargo +stable run --locked --example probe -- --instance-only 2>&1 | tee release.log
       - name: Run Vulkan compute probe
         if: steps.metal.outputs.available == 'true'
         run: |
@@ -91,7 +93,7 @@ jobs:
       - name: Report failure details
         if: failure()
         run: |
-          for file in build.log probe-build.log dependencies.log instance.log probe.log; do
+          for file in build.log probe-build.log dependencies.log instance.log release.log probe.log; do
             if test -f "$file"; then
               detail=$(tail -c 4000 "$file")
               detail=${detail//'%'/'%25'}

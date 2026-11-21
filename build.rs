@@ -1,5 +1,8 @@
 use std::{env, path::PathBuf};
 
+const ARCHIVE: &str = "kosmickrisp-26.3.0-aarch64-apple-darwin-macos26.tar.gz";
+const ARCHIVE_SHA256: &str = "d68b599425b5b76f2ff57bef812bae8c26e4dcd651c7026a24278b291c97c648";
+
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     for name in [
@@ -18,12 +21,30 @@ fn main() {
         );
         return;
     }
+    let source = env::var_os("CARGO_FEATURE_BUILD_KOSMICKRISP").is_some();
+    if !source && env::var_os("KOSMICKRISP_STATIC_DIR").is_none() {
+        match (
+            env::var_os("KOSMICKRISP_ARTIFACT_URL"),
+            env::var_os("KOSMICKRISP_ARTIFACT_SHA256"),
+        ) {
+            (None, None) => {
+                let url = format!(
+                    "https://github.com/jlogan03/kosmickrisp-static/releases/download/v{}/{ARCHIVE}",
+                    env!("CARGO_PKG_VERSION")
+                );
+                // SAFETY: This build script has not started any threads.
+                unsafe {
+                    env::set_var("KOSMICKRISP_ARTIFACT_URL", url);
+                    env::set_var("KOSMICKRISP_ARTIFACT_SHA256", ARCHIVE_SHA256);
+                }
+            }
+            (Some(_), Some(_)) => {}
+            _ => panic!("Set both KOSMICKRISP_ARTIFACT_URL and KOSMICKRISP_ARTIFACT_SHA256"),
+        }
+    }
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
-    let lib = kosmickrisp_build::prepare(
-        &out,
-        env::var_os("CARGO_FEATURE_BUILD_KOSMICKRISP").is_some(),
-    )
-    .unwrap_or_else(|error| panic!("KosmicKrisp preparation failed: {error:#}"));
+    let lib = kosmickrisp_build::prepare(&out, source)
+        .unwrap_or_else(|error| panic!("KosmicKrisp preparation failed: {error:#}"));
     println!("cargo:rustc-link-search=native={}", lib.display());
     // Mesa dispatch tables use weak references to optional entry points.
     println!("cargo:rustc-link-lib=static:+whole-archive=KosmicKrisp");
