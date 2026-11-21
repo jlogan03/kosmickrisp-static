@@ -2,9 +2,9 @@
 # Install mode includes the dependencies that Mesa does not install separately.
 static_library(
   'kosmickrisp_static',
-  'static_entry.c',
+  ['static_entry.c', kk_entrypoints[0]],
   include_directories : [inc_include, inc_src],
-  dependencies : kk_deps,
+  dependencies : idep_vulkan_util_headers,
   link_whole : libkk,
   gnu_symbol_visibility : 'hidden',
   install : true,
