@@ -35,6 +35,14 @@ jobs:
           rustup toolchain install stable --profile minimal
       - name: Test artifact handling
         run: cargo +stable test --locked -p kosmickrisp-build
+      - uses: actions/cache/restore@v5
+        id: native-cache
+        with:
+          key: spirv-tools-ef96ed76-${{ runner.arch }}-xcode26.6
+          path: |
+            dist/source/SPIRV-Tools
+            dist/source/tools-build
+            dist/source/prefix
       - name: Build and package KosmicKrisp
         run: cargo +stable run --locked -p kosmickrisp-build -- dist 2>&1 | tee build.log
       - name: Run Vulkan compute probe
@@ -60,6 +68,14 @@ jobs:
               echo "::error title=$file::$detail"
             fi
           done
+      - uses: actions/cache/save@v5
+        if: always() && steps.native-cache.outputs.cache-hit != 'true' && hashFiles('dist/source/prefix/lib/libSPIRV-Tools.a') != ''
+        with:
+          key: spirv-tools-ef96ed76-${{ runner.arch }}-xcode26.6
+          path: |
+            dist/source/SPIRV-Tools
+            dist/source/tools-build
+            dist/source/prefix
       - name: Upload archive and logs
         if: always()
         uses: actions/upload-artifact@v7
