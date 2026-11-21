@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   macos:
     runs-on: macos-26
@@ -38,6 +42,7 @@ jobs:
         run: cargo +stable run --locked --example probe 2>&1 | tee probe.log
       - name: Check dynamic dependencies
         run: |
+          test -x target/debug/examples/probe
           otool -L target/debug/examples/probe | tee dependencies.log
           if grep -E '/opt/homebrew|/usr/local|libvulkan|libLLVM|libclang|libSPIRV' dependencies.log; then
             exit 1

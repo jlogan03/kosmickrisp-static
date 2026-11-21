@@ -1,0 +1,24 @@
+name: Read prototype diagnostics
+on: push
+permissions:
+  actions: read
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          repository: jlogan03/kosmickrisp-static
+          run-id: 44848913456
+          github-token: ${{ github.token }}
+          path: logs
+      - name: Report build output
+        shell: bash
+        run: |
+          while IFS= read -r file; do
+            detail=$(tail -100 "$file")
+            detail=${detail//'%'/'%25'}
+            detail=${detail//$'\n'/'%0A'}
+            detail=${detail//$'\r'/'%0D'}
+            echo "::notice title=$file::$detail"
+          done < <(find logs -name '*.log')
