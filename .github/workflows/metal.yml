@@ -14,6 +14,9 @@ jobs:
       - name: Query Metal devices
         shell: bash
         run: |
+          echo "::notice title=macOS::$(sw_vers -productVersion) (build $(sw_vers -buildVersion)), $(uname -m)"
+          echo "::notice title=Xcode::$(xcodebuild -version | tr '\n' ' ')"
+          echo "::notice title=macOS SDK::$(xcrun --sdk macosx --show-sdk-version)"
           xcrun swift - <<'SWIFT' 2>&1 | tee metal.log
           import Metal
           let devices = MTLCopyAllDevices()
