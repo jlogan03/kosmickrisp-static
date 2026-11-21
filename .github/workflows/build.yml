@@ -1,0 +1,121 @@
+name: Build static archive
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install build tools
+        run: |
+          brew install llvm spirv-llvm-translator pkgconf ninja
+          python -m pip install meson==1.9.1 mako packaging pyyaml
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+          echo "PKG_CONFIG_PATH=$(brew --prefix spirv-llvm-translator)/lib/pkgconfig" >> "$GITHUB_ENV"
+          rustup toolchain install stable --profile minimal
+      - name: Test artifact handling
+        run: cargo +stable test --locked -p kosmickrisp-build
+      - name: Check Metal 4 support
+        id: metal
+        run: |
+          xcrun swift - <<'SWIFT' | tee metal.log
+          import Metal
+          let devices = MTLCopyAllDevices()
+          for device in devices {
+              print("Device: \(device.name), Metal 4: \(device.supportsFamily(.metal4))")
+          }
+          print(devices.contains { $0.supportsFamily(.metal4) })
+          SWIFT
+          available=$(tail -1 metal.log)
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+          if [[ "$available" != true ]]; then
+            echo "::notice title=Compute test skipped::This runner has no Metal 4 device. Build, link, and Vulkan instance checks still run."
+          fi
+      - uses: actions/cache/restore@v5
+        id: native-cache
+        with:
+          key: spirv-tools-ef96ed76-${{ runner.arch }}-xcode26.6
+          path: |
+            dist/source/SPIRV-Tools
+            dist/source/tools-build
+            dist/source/prefix
+      - name: Build and package KosmicKrisp
+        run: cargo +stable run --locked -p kosmickrisp-build -- dist 2>&1 | tee build.log
+      - name: Build Vulkan probe
+        env:
+          KOSMICKRISP_STATIC_DIR: ${{ github.workspace }}/dist/artifact
+        run: cargo +stable build --locked --example probe 2>&1 | tee probe-build.log
+      - name: Check dynamic dependencies
+        run: |
+          test -x target/debug/examples/probe
+          otool -L target/debug/examples/probe | tee dependencies.log
+          while IFS= read -r library; do
+            case "$library" in
+              /usr/lib/*|/System/Library/*) ;;
+              *) echo "Unexpected dynamic dependency: $library"; exit 1 ;;
+            esac
+          done < <(tail -n +2 dependencies.log | awk '{print $1}')
+          echo "::notice title=Dynamic dependencies::Only system libraries and frameworks are linked dynamically."
+      - name: Check Vulkan instance
+        run: |
+          target/debug/examples/probe --instance-only 2>&1 | tee instance.log
+          echo "::notice title=Vulkan instance::$(tail -1 instance.log)"
+      - name: Run Vulkan compute probe
+        if: steps.metal.outputs.available == 'true'
+        run: |
+          target/debug/examples/probe 2>&1 | tee probe.log
+          echo "::notice title=Vulkan compute::$(tail -2 probe.log | tr '\n' ' ')"
+      - name: Report failure details
+        if: failure()
+        run: |
+          for file in build.log probe-build.log dependencies.log instance.log probe.log; do
+            if test -f "$file"; then
+              detail=$(tail -c 4000 "$file")
+              detail=${detail//'%'/'%25'}
+              detail=${detail//$'\n'/'%0A'}
+              detail=${detail//$'\r'/'%0D'}
+              echo "::error title=$file::$detail"
+            fi
+          done
+      - uses: actions/cache/save@v5
+        if: always() && steps.native-cache.outputs.cache-hit != 'true' && hashFiles('dist/source/prefix/lib/libSPIRV-Tools.a') != ''
+        with:
+          key: spirv-tools-ef96ed76-${{ runner.arch }}-xcode26.6
+          path: |
+            dist/source/SPIRV-Tools
+            dist/source/tools-build
+            dist/source/prefix
+      - name: Upload archive and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: kosmickrisp-aarch64-apple-darwin-macos26
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            *.log
+            dist/source/mesa-build/meson-logs/meson-log.txt
+          compression-level: 0

@@ -1,0 +1,23 @@
+[package]
+name = "kosmickrisp-static"
+version = "0.1.0"
+edition = "2024"
+links = "KosmicKrisp"
+description = "Static KosmicKrisp for ARM64 macOS"
+license = "MIT"
+publish = false
+
+[workspace]
+members = ["build-support"]
+default-members = ["."]
+resolver = "3"
+
+[features]
+build-kosmickrisp = []
+
+[build-dependencies]
+kosmickrisp-build = { path = "build-support" }
+
+[dev-dependencies]
+ash = { version = "0.38", default-features = false, features = ["std"] }
+rspirv = "0.12"
