@@ -28,7 +28,7 @@ fn main() {
     // Mesa dispatch tables use weak references to optional entry points.
     println!("cargo:rustc-link-lib=static:+whole-archive=KosmicKrisp");
     println!("cargo:rustc-link-lib=dylib=c++");
-    for framework in ["Metal", "Foundation", "QuartzCore"] {
+    for framework in ["Metal", "Foundation", "QuartzCore", "CoreGraphics"] {
         println!("cargo:rustc-link-lib=framework={framework}");
     }
     if let Some(local) = env::var_os("KOSMICKRISP_STATIC_DIR") {
