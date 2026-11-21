@@ -173,9 +173,14 @@ fn missing_entrypoints(symbols: &str) -> Result<BTreeSet<&str>> {
     let mut required = BTreeSet::new();
     let mut defined = BTreeSet::new();
     for line in symbols.lines() {
-        let Some(name) = line.split_whitespace().last() else { continue };
-        if !["_kk_", "_wsi_", "_vk_common_", "_vk_cmd_enqueue"].iter().any(|prefix| name.starts_with(prefix))
-            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+        let Some(name) = line.split_whitespace().last() else {
+            continue;
+        };
+        if !["_kk_", "_wsi_", "_vk_common_", "_vk_cmd_enqueue"]
+            .iter()
+            .any(|prefix| name.starts_with(prefix))
+            || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        {
             continue;
         }
         if !line.contains("(undefined)") {
@@ -187,7 +192,10 @@ fn missing_entrypoints(symbols: &str) -> Result<BTreeSet<&str>> {
         }
     }
     let missing: BTreeSet<_> = optional.difference(&defined).copied().collect();
-    ensure!(missing.is_disjoint(&required), "unimplemented entry point has a required reference");
+    ensure!(
+        missing.is_disjoint(&required),
+        "unimplemented entry point has a required reference"
+    );
     Ok(missing)
 }
 
@@ -257,9 +265,13 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     // libpoly_nir already supplies the generated libpoly.cpp object.
     let shaders_meson = source.join("src/kosmickrisp/libkk/meson.build");
     let shaders = fs::read_to_string(&shaders_meson)?;
-    fs::write(&shaders_meson, shaders.replace(
-        "dependencies : [idep_nir, idep_mesautil, idep_libpoly]",
-        "dependencies : [idep_nir, idep_mesautil]"))?;
+    fs::write(
+        &shaders_meson,
+        shaders.replace(
+            "dependencies : [idep_nir, idep_mesautil, idep_libpoly]",
+            "dependencies : [idep_nir, idep_mesautil]",
+        ),
+    )?;
     let mesa_build = work.join("mesa-build");
     let mut setup = Command::new("meson");
     setup.arg("setup");
@@ -306,18 +318,27 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
         .env("SDKROOT", &sdk)
         .env("MACOSX_DEPLOYMENT_TARGET", "26.0"))?;
     let mesa_archive = mesa_build.join("src/kosmickrisp/vulkan/libkosmickrisp_static.a");
-    let symbols = output(Command::new("xcrun").args(["nm", "-m", "-g"]).arg(&mesa_archive))?;
+    let symbols = output(
+        Command::new("xcrun")
+            .args(["nm", "-m", "-g"])
+            .arg(&mesa_archive),
+    )?;
     let mut nulls = String::new();
     // Resolve absent optional entry points without dynamic symbol lookup.
     // Keep these absolute symbols private to the consumer's binary.
     for name in missing_entrypoints(&symbols)? {
-        nulls.push_str(&format!(".globl {name}\n.private_extern {name}\n{name} = 0\n"));
+        nulls.push_str(&format!(
+            ".globl {name}\n.private_extern {name}\n{name} = 0\n"
+        ));
     }
     let assembly = work.join("null_entrypoints.s");
     let object = work.join("null_entrypoints.o");
     fs::write(&assembly, nulls)?;
-    run(Command::new("xcrun").args(["clang", "-arch", "arm64", "-mmacosx-version-min=26.0", "-c"])
-        .arg(&assembly).arg("-o").arg(&object))?;
+    run(Command::new("xcrun")
+        .args(["clang", "-arch", "arm64", "-mmacosx-version-min=26.0", "-c"])
+        .arg(&assembly)
+        .arg("-o")
+        .arg(&object))?;
     run(Command::new("xcrun")
         .args(["libtool", "-static", "-o"])
         .arg(destination.join("libKosmicKrisp.a"))

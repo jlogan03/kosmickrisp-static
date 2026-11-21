@@ -9,10 +9,17 @@ fn only_absent_optional_entrypoints_resolve_to_null() -> Result<()> {
                  (undefined) weak external _OBJC_CLASS_$_Optional
                  (undefined) external _kk_Required
 ";
-    assert_eq!(missing_entrypoints(symbols)?, BTreeSet::from(["_kk_Unsupported"]));
-    assert!(missing_entrypoints(&(symbols.to_owned() + "(undefined) external _kk_Unsupported\n")).is_err());
+    assert_eq!(
+        missing_entrypoints(symbols)?,
+        BTreeSet::from(["_kk_Unsupported"])
+    );
+    assert!(
+        missing_entrypoints(&(symbols.to_owned() + "(undefined) external _kk_Unsupported\n"))
+            .is_err()
+    );
     Ok(())
-           
+}
+
 fn fixture(root: &Path) -> Result<PathBuf> {
     let artifact = root.join("fixture");
     fs::create_dir_all(artifact.join("licenses/KosmicKrisp"))?;
