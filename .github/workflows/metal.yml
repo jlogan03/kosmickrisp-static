@@ -1,0 +1,24 @@
+name: Check Metal capabilities
+on:
+  push:
+    branches: [codex/metal-probe]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  metal:
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Query Metal devices
+        shell: bash
+        run: |
+          xcrun swift - <<'SWIFT' 2>&1 | tee metal.log
+          import Metal
+          let devices = MTLCopyAllDevices()
+          print("::notice title=Metal devices::Count: \(devices.count)")
+          for device in devices {
+              print("::notice title=Metal device::\(device.name), Metal 4: \(device.supportsFamily(.metal4)), Apple 7: \(device.supportsFamily(.apple7)), Mac 2: \(device.supportsFamily(.mac2))")
+          }
+          SWIFT
