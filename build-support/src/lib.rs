@@ -258,10 +258,12 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     let driver = source.join("src/kosmickrisp/vulkan");
     fs::write(driver.join("static_entry.c"), STATIC_ENTRY)?;
     let meson_file = driver.join("meson.build");
-    let meson = fs::read_to_string(&meson_file)?;
-    if !meson.contains("'kosmickrisp_static'") {
-        fs::write(&meson_file, meson + STATIC_MESON)?;
-    }
+    let meson = output(
+        Command::new("git")
+            .args(["show", "HEAD:src/kosmickrisp/vulkan/meson.build"])
+            .current_dir(&source),
+    )?;
+    fs::write(&meson_file, meson + "\n" + STATIC_MESON)?;
     // libpoly_nir already supplies the generated libpoly.cpp object.
     let shaders_meson = source.join("src/kosmickrisp/libkk/meson.build");
     let shaders = fs::read_to_string(&shaders_meson)?;

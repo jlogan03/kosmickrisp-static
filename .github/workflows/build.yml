@@ -38,6 +38,22 @@ jobs:
           rustup toolchain install stable --profile minimal
       - name: Test artifact handling
         run: cargo +stable test --locked -p kosmickrisp-build
+      - name: Check Metal 4 support
+        id: metal
+        run: |
+          xcrun swift - <<'SWIFT' | tee metal.log
+          import Metal
+          let devices = MTLCopyAllDevices()
+          for device in devices {
+              print("Device: \(device.name), Metal 4: \(device.supportsFamily(.metal4))")
+          }
+          print(devices.contains { $0.supportsFamily(.metal4) })
+          SWIFT
+          available=$(tail -1 metal.log)
+          echo "available=$available" >> "$GITHUB_OUTPUT"
+          if [[ "$available" != true ]]; then
+            echo "::notice title=Compute test skipped::This runner has no Metal 4 device. Build, link, and Vulkan instance checks still run."
+          fi
       - uses: actions/cache/restore@v5
         id: native-cache
         with:
@@ -48,12 +64,10 @@ jobs:
             dist/source/prefix
       - name: Build and package KosmicKrisp
         run: cargo +stable run --locked -p kosmickrisp-build -- dist 2>&1 | tee build.log
-      - name: Run Vulkan compute probe
+      - name: Build Vulkan probe
         env:
           KOSMICKRISP_STATIC_DIR: ${{ github.workspace }}/dist/artifact
-        run: |
-          cargo +stable run --locked --example probe 2>&1 | tee probe.log
-          echo "::notice title=Vulkan probe::$(tail -2 probe.log | tr '\n' ' ')"
+        run: cargo +stable build --locked --example probe 2>&1 | tee probe-build.log
       - name: Check dynamic dependencies
         run: |
           test -x target/debug/examples/probe
@@ -64,10 +78,20 @@ jobs:
               *) echo "Unexpected dynamic dependency: $library"; exit 1 ;;
             esac
           done < <(tail -n +2 dependencies.log | awk '{print $1}')
+          echo "::notice title=Dynamic dependencies::Only system libraries and frameworks are linked dynamically."
+      - name: Check Vulkan instance
+        run: |
+          target/debug/examples/probe --instance-only 2>&1 | tee instance.log
+          echo "::notice title=Vulkan instance::$(tail -1 instance.log)"
+      - name: Run Vulkan compute probe
+        if: steps.metal.outputs.available == 'true'
+        run: |
+          target/debug/examples/probe 2>&1 | tee probe.log
+          echo "::notice title=Vulkan compute::$(tail -2 probe.log | tr '\n' ' ')"
       - name: Report failure details
         if: failure()
         run: |
-          for file in build.log probe.log; do
+          for file in build.log probe-build.log dependencies.log instance.log probe.log; do
             if test -f "$file"; then
               detail=$(tail -c 4000 "$file")
               detail=${detail//'%'/'%25'}

@@ -17,7 +17,13 @@ needs Python with Meson 1.9.1 or later, Mako, packaging, and PyYAML.
 cargo run --features build-kosmickrisp --example probe
 ```
 
-The probe creates a Vulkan device and checks a compute shader's output.
+The probe creates a Vulkan device and checks a compute shader's output. It
+requires a Metal 4 device. Use `-- --instance-only` to test instance creation
+without a GPU.
+
+CI builds the archive, links the probe, and checks instance creation and dynamic
+dependencies. GitHub's hosted macOS runner exposes a virtual GPU without Metal 4,
+so CI skips the compute test there. Compute validation requires a Metal 4 device.
 
 ## Package an archive
 

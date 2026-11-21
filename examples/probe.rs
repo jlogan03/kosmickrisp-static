@@ -228,7 +228,7 @@ unsafe fn compute(
     }
 }
 
-fn probe(entry: Entry) -> Result<()> {
+fn probe(entry: Entry, instance_only: bool) -> Result<()> {
     unsafe {
         assert!(entry.enumerate_instance_layer_properties()?.is_empty());
         let info = vk::ApplicationInfo::default().api_version(vk::API_VERSION_1_2);
@@ -236,10 +236,13 @@ fn probe(entry: Entry) -> Result<()> {
             &vk::InstanceCreateInfo::default().application_info(&info),
             None,
         )?;
-        let physical = *instance
-            .enumerate_physical_devices()?
-            .first()
-            .ok_or("KosmicKrisp found no GPU")?;
+        let devices = instance.enumerate_physical_devices()?;
+        println!("Vulkan instance passed: {} GPU(s)", devices.len());
+        if instance_only {
+            instance.destroy_instance(None);
+            return Ok(());
+        }
+        let physical = *devices.first().ok_or("KosmicKrisp found no GPU")?;
         let properties = instance.get_physical_device_properties(physical);
         println!(
             "Device: {}",
@@ -280,7 +283,12 @@ fn main() -> Result<()> {
             get_instance_proc_addr: lookup,
         })
     };
-    probe(entry)
+    let instance_only = match std::env::args().skip(1).collect::<Vec<_>>().as_slice() {
+        [] => false,
+        [flag] if flag == "--instance-only" => true,
+        _ => return Err("usage: probe [--instance-only]".into()),
+    };
+    probe(entry, instance_only)
 }
 
 #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
