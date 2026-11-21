@@ -13,7 +13,10 @@ func report(_ title: String, _ message: String) {
 let source = """
 #include <metal_stdlib>
 using namespace metal;
-kernel void probe(device uint *values [[buffer(0)]], uint i [[thread_position_in_grid]]) {
+struct Descriptor { device uint *values; };
+struct Root { const device Descriptor *descriptors; };
+kernel void probe(constant Root &root [[buffer(0)]], uint i [[thread_position_in_grid]]) {
+    device uint *values = root.descriptors[0].values;
     values[i] = values[i] * 3 + 1;
 }
 """
@@ -40,6 +43,11 @@ for device in devices {
     let buffer = device.makeBuffer(length: count * MemoryLayout<UInt32>.stride, options: .storageModeShared)!
     report("Buffer address", "Nonzero: \(buffer.gpuAddress != 0)")
     let values = buffer.contents().bindMemory(to: UInt32.self, capacity: count)
+    // Match KosmicKrisp's root -> descriptor -> data address chain.
+    let descriptor = device.makeBuffer(length: MemoryLayout<UInt64>.stride, options: .storageModeShared)!
+    descriptor.contents().storeBytes(of: buffer.gpuAddress, as: UInt64.self)
+    let root = device.makeBuffer(length: MemoryLayout<UInt64>.stride, options: .storageModeShared)!
+    root.contents().storeBytes(of: descriptor.gpuAddress, as: UInt64.self)
     let queue = device.makeCommandQueue()!
     var successes = 0
     for (name, version) in versions {
@@ -52,7 +60,9 @@ for device in devices {
             let command = queue.makeCommandBuffer()!
             let encoder = command.makeComputeCommandEncoder()!
             encoder.setComputePipelineState(pipeline)
-            encoder.setBuffer(buffer, offset: 0, index: 0)
+            encoder.setBuffer(root, offset: 0, index: 0)
+            encoder.useResource(descriptor, usage: .read)
+            encoder.useResource(buffer, usage: [.read, .write])
             encoder.dispatchThreadgroups(MTLSize(width: count, height: 1, depth: 1),
                                         threadsPerThreadgroup: MTLSize(width: 1, height: 1, depth: 1))
             encoder.endEncoding()
@@ -61,7 +71,7 @@ for device in devices {
             if let error = command.error { throw error }
             precondition(command.status == .completed, "Compute did not complete")
             precondition((0..<count).allSatisfy { values[$0] == UInt32($0 * 3 + 1) }, "Wrong compute result")
-            report("MSL \(name)", "Compiled and ran: all \(count) values match")
+            report("MSL \(name)", "Pointer chain passed: all \(count) values match")
             successes += 1
         } catch {
             report("MSL \(name)", "Failed: \(error)")
