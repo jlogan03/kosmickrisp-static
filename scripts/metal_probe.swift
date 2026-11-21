@@ -1,11 +1,13 @@
 import Foundation
 import Metal
 
+var observations: [String] = []
 func report(_ title: String, _ message: String) {
     let escaped = message.replacingOccurrences(of: "%", with: "%25")
         .replacingOccurrences(of: "\n", with: "%0A")
         .replacingOccurrences(of: "\r", with: "%0D")
-    print("::notice title=\(title)::\(escaped)")
+    observations.append("\(title): \(escaped)")
+    print("\(title): \(message)")
 }
 
 let source = """
@@ -67,3 +69,4 @@ for device in devices {
     }
     precondition(successes > 0, "No language version passed the compute test")
 }
+print("::notice title=Metal capabilities::\(observations.joined(separator: " | "))")
