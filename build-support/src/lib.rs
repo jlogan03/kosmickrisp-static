@@ -194,6 +194,8 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
 
     let prefix = work.join("prefix");
     let tools_build = work.join("tools-build");
+    let cc = output(Command::new("xcrun").args(["--find", "clang"]))?;
+    let cxx = output(Command::new("xcrun").args(["--find", "clang++"]))?;
     run(Command::new("cmake")
         .arg("-S")
         .arg(&tools)
@@ -209,7 +211,9 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
             "-DCMAKE_OSX_ARCHITECTURES=arm64",
             "-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0",
         ])
-        .arg(format!("-DCMAKE_INSTALL_PREFIX={}", prefix.display())))?;
+        .arg(format!("-DCMAKE_INSTALL_PREFIX={}", prefix.display()))
+        .arg(format!("-DCMAKE_C_COMPILER={cc}"))
+        .arg(format!("-DCMAKE_CXX_COMPILER={cxx}")))?;
     let jobs = std::thread::available_parallelism()?.get().to_string();
     run(Command::new("cmake")
         .arg("--build")
@@ -224,13 +228,6 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     if !meson.contains("'kosmickrisp_static'") {
         fs::write(&meson_file, meson + STATIC_MESON)?;
     }
-    // Darwin needs weak imports for entry points that the driver does not implement.
-    let generator = source.join("src/vulkan/util/vk_entrypoints_gen.py");
-    let generated = fs::read_to_string(&generator)?;
-    fs::write(&generator, generated.replace(
-        "#if !defined(_MSC_VER) && defined(VK_ENTRY_USE_WEAK)",
-        "#if defined(__APPLE__) && defined(VK_ENTRY_USE_WEAK)\n#define VK_ENTRY_WEAK __attribute__ ((weak_import))\n#elif !defined(_MSC_VER) && defined(VK_ENTRY_USE_WEAK)"))?;
-
     let mesa_build = work.join("mesa-build");
     let mut setup = Command::new("meson");
     setup.arg("setup");
@@ -262,6 +259,11 @@ fn build(work: &Path, destination: &Path) -> Result<()> {
     }
     setup.env("PKG_CONFIG_PATH", env::join_paths(pkg_paths)?);
     setup.env("MACOSX_DEPLOYMENT_TARGET", "26.0");
+    setup
+        .env("CC", &cc)
+        .env("CXX", &cxx)
+        .env("OBJC", &cc)
+        .env("OBJCPP", &cxx);
     run(&mut setup)?;
     run(Command::new("meson")
         .arg("compile")
