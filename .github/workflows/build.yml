@@ -2,7 +2,7 @@ name: Build static archive
 
 on:
   push:
-    branches: [main, codex/static-build]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
